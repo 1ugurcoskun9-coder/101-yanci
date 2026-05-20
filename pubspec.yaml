@@ -1,0 +1,27 @@
+name: yanci_giris
+description: 101Yanci
+publish_to: 'none'
+version: 0.9.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  firebase_core: ^4.2.0
+  firebase_auth: ^6.1.2
+  cloud_firestore: ^6.0.3
+  shared_preferences: ^2.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/welcome_bg.png
+    - assets/images/menu_bg.png

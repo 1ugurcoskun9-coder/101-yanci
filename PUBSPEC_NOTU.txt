@@ -1,0 +1,8 @@
+pubspec.yaml içine eklenecek:
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/welcome_bg.png
+    - assets/images/menu_bg.png
