@@ -25,6 +25,7 @@ class _OdaOlusturPageState extends State<OdaOlusturPage> {
   String oyunSekli = 'Tek';
   bool katlamali = true;
   bool yardimli = false;
+  bool cezali = false;
   bool sifreli = false;
   int girisUcreti = 10000;
   bool yukleniyor = false;
@@ -55,6 +56,7 @@ class _OdaOlusturPageState extends State<OdaOlusturPage> {
         oyunSekli: oyunSekli,
         katlamali: katlamali,
         yardimli: yardimli,
+        cezali: cezali,
         girisUcreti: girisUcreti,
         sifreli: sifreli,
         sifre: sifreController.text.trim(),
@@ -65,7 +67,7 @@ class _OdaOlusturPageState extends State<OdaOlusturPage> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => GameTablePage(roomId: roomId),
+          builder: (_) => GameTablePage(roomId: roomId, cezali: cezali),
         ),
       );
     } catch (e) {
@@ -144,6 +146,13 @@ class _OdaOlusturPageState extends State<OdaOlusturPage> {
                   onChanged: (value) => setState(() => yardimli = value),
                   title: Text(yardimli ? 'Yardımlı' : 'Yardımsız'),
                   subtitle: const Text('Yardımlı masada taşlar otomatik işlenebilir'),
+                  activeColor: Colors.amber,
+                ),
+                SwitchListTile(
+                  value: cezali,
+                  onChanged: (value) => setState(() => cezali = value),
+                  title: Text(cezali ? 'Cezalı' : 'Cezasız'),
+                  subtitle: const Text('Cezalı / cezasız oyun seçimi'),
                   activeColor: Colors.amber,
                 ),
                 SwitchListTile(

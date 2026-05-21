@@ -267,6 +267,7 @@ class AnaMenuPage extends StatelessWidget {
               oyunSekli: 'Tek',
               katlamali: true,
               yardimli: false,
+              cezali: false,
               girisUcreti: 10000,
               sifreli: false,
               sifre: '',
