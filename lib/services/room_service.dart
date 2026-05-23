@@ -16,6 +16,7 @@ class RoomService {
     required bool katlamali,
     required bool yardimli,
     bool cezali = false,
+    int elSayisi = 11,
     int girisUcreti = 10000,
     bool sifreli = false,
     String sifre = '',
@@ -25,6 +26,7 @@ class RoomService {
 
     final roomRef = _rooms.doc();
     final odaKodu = roomRef.id.substring(0, 6).toUpperCase();
+    final guvenliElSayisi = elSayisi.clamp(1, 11).toInt();
 
     await roomRef.set({
       'id': roomRef.id,
@@ -34,6 +36,9 @@ class RoomService {
       'katlamali': katlamali,
       'yardimli': yardimli,
       'cezali': cezali,
+      'elSayisi': guvenliElSayisi,
+      'toplamElSayisi': guvenliElSayisi,
+      'mevcutEl': 1,
       'girisUcreti': girisUcreti,
       'sifreli': sifreli,
       'sifre': sifreli ? sifre : '',

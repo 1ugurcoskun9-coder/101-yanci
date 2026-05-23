@@ -28,6 +28,7 @@ class _OdaOlusturPageState extends State<OdaOlusturPage> {
   bool cezali = false;
   bool sifreli = false;
   int girisUcreti = 10000;
+  int elSayisi = 11;
   bool yukleniyor = false;
 
   @override
@@ -57,6 +58,7 @@ class _OdaOlusturPageState extends State<OdaOlusturPage> {
         katlamali: katlamali,
         yardimli: yardimli,
         cezali: cezali,
+        elSayisi: elSayisi,
         girisUcreti: girisUcreti,
         sifreli: sifreli,
         sifre: sifreController.text.trim(),
@@ -67,7 +69,7 @@ class _OdaOlusturPageState extends State<OdaOlusturPage> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => GameTablePage(roomId: roomId, cezali: cezali),
+          builder: (_) => GameTablePage(roomId: roomId, cezali: cezali, oyunSekli: oyunSekli, elSayisi: elSayisi),
         ),
       );
     } catch (e) {
@@ -131,6 +133,29 @@ class _OdaOlusturPageState extends State<OdaOlusturPage> {
                   _secimButonu('Tek', oyunSekli == 'Tek', () => setState(() => oyunSekli = 'Tek')),
                   _secimButonu('Eşli', oyunSekli == 'Eşli', () => setState(() => oyunSekli = 'Eşli')),
                 ]),
+                const SizedBox(height: 18),
+
+
+
+                _baslik('El Sayısı'),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    for (int sayi = 1; sayi <= 11; sayi++)
+                      ChoiceChip(
+                        selected: elSayisi == sayi,
+                        label: Text('$sayi'),
+                        onSelected: (_) => setState(() => elSayisi = sayi),
+                        selectedColor: Colors.amber,
+                        labelStyle: TextStyle(
+                          color: elSayisi == sayi ? Colors.black : Colors.white,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 18),
 
                 _baslik('Kurallar'),

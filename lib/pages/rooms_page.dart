@@ -36,7 +36,7 @@ class OdalarPage extends StatelessWidget {
               );
             },
             icon: const Icon(Icons.add, color: Colors.amber),
-            label: const Text('Oda Aç', style: TextStyle(color: Colors.amber)),
+            label: const Text('Masa Aç', style: TextStyle(color: Colors.amber)),
           ),
         ],
       ),
@@ -68,12 +68,12 @@ class OdalarPage extends StatelessWidget {
                     const Icon(Icons.table_bar, color: Colors.amber, size: 70),
                     const SizedBox(height: 16),
                     Text(
-                      '$oyunTuru için açık oda yok.',
+                      'Açık masa bulunamadı.',
                       style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'İlk odayı sen oluşturabilirsin.',
+                      'İlk masayı sen açabilirsin.',
                       style: TextStyle(color: Colors.white70),
                     ),
                     const SizedBox(height: 18),
@@ -90,7 +90,7 @@ class OdalarPage extends StatelessWidget {
                         );
                       },
                       icon: const Icon(Icons.add),
-                      label: const Text('Oda Oluştur'),
+                      label: const Text('Masa Aç'),
                     ),
                   ],
                 ),
@@ -186,7 +186,12 @@ class OdalarPage extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => GameTablePage(roomId: roomId),
+                    builder: (_) => GameTablePage(
+                      roomId: roomId,
+                      cezali: data['cezali'] == true,
+                      oyunSekli: oyunSekli.toString(),
+                      elSayisi: ((data['elSayisi'] ?? data['toplamElSayisi'] ?? 11) as num).toInt(),
+                    ),
                   ),
                 );
               } catch (e) {

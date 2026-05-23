@@ -268,6 +268,7 @@ class AnaMenuPage extends StatelessWidget {
               katlamali: true,
               yardimli: false,
               cezali: false,
+              elSayisi: 11,
               girisUcreti: 10000,
               sifreli: false,
               sifre: '',
@@ -275,7 +276,7 @@ class AnaMenuPage extends StatelessWidget {
 
             if (!context.mounted) return;
 
-            _git(context, GameTablePage(roomId: roomId));
+            _git(context, GameTablePage(roomId: roomId, cezali: false, oyunSekli: 'Tek', elSayisi: 11));
           },
           child: Container(
             decoration: BoxDecoration(
