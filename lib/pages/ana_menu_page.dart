@@ -276,7 +276,7 @@ class AnaMenuPage extends StatelessWidget {
 
             if (!context.mounted) return;
 
-            _git(context, GameTablePage(roomId: roomId, cezali: false, oyunSekli: 'Tek', elSayisi: 11));
+            _git(context, GameTablePage(roomId: roomId, cezali: false, yardimli: false, oyunSekli: 'Tek', elSayisi: 11));
           },
           child: Container(
             decoration: BoxDecoration(
@@ -405,7 +405,7 @@ class AnaMenuPage extends StatelessWidget {
 
                           if (!context.mounted) return;
 
-                          _git(context, GameTablePage(roomId: doc.id));
+                          _git(context, GameTablePage(roomId: doc.id, cezali: doc.data()['cezali'] == true, yardimli: doc.data()['yardimli'] == true, oyunSekli: '${doc.data()['oyunSekli'] ?? 'Tek'}', elSayisi: ((doc.data()['elSayisi'] ?? doc.data()['toplamElSayisi'] ?? 11) as num).toInt()));
                         } catch (e) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text('Odaya girilemedi: $e')),

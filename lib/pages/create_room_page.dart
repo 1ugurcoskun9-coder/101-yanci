@@ -69,7 +69,7 @@ class _OdaOlusturPageState extends State<OdaOlusturPage> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => GameTablePage(roomId: roomId, cezali: cezali, oyunSekli: oyunSekli, elSayisi: elSayisi),
+          builder: (_) => GameTablePage(roomId: roomId, cezali: cezali, yardimli: yardimli, oyunSekli: oyunSekli, elSayisi: elSayisi),
         ),
       );
     } catch (e) {

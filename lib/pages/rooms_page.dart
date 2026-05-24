@@ -189,6 +189,7 @@ class OdalarPage extends StatelessWidget {
                     builder: (_) => GameTablePage(
                       roomId: roomId,
                       cezali: data['cezali'] == true,
+                      yardimli: data['yardimli'] == true,
                       oyunSekli: oyunSekli.toString(),
                       elSayisi: ((data['elSayisi'] ?? data['toplamElSayisi'] ?? 11) as num).toInt(),
                     ),
