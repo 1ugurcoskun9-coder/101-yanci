@@ -135,6 +135,34 @@ class GameTablePage extends StatefulWidget {
 
 enum _IslemeYonu { basa, sona }
 
+class _IslenenHamleKaydi {
+  final List<OkeyTasi> grup;
+  final List<OkeyTasi> taslar;
+  final List<int> eskiIstakaIndexleri;
+  final String? hedefOyuncuId;
+  final bool ciftGrubuMu;
+  final bool yeniGrupMu;
+  final _IslemeYonu? seriYonu;
+  final bool seriLimitSayildi;
+  final bool okeyDegisimi;
+  final OkeyTasi? eskiOkey;
+  final int? okeyIstakaIndex;
+
+  const _IslenenHamleKaydi({
+    required this.grup,
+    required this.taslar,
+    required this.eskiIstakaIndexleri,
+    this.hedefOyuncuId,
+    this.ciftGrubuMu = false,
+    this.yeniGrupMu = false,
+    this.seriYonu,
+    this.seriLimitSayildi = false,
+    this.okeyDegisimi = false,
+    this.eskiOkey,
+    this.okeyIstakaIndex,
+  });
+}
+
 class _GameTablePageState extends State<GameTablePage> {
   final RoomService _service = RoomService();
   static const int _istakaSiraKapasite = 18;
@@ -146,6 +174,9 @@ class _GameTablePageState extends State<GameTablePage> {
   final Map<String, List<OkeyTasi>> _atilanTaslar = <String, List<OkeyTasi>>{};
   final Map<int, Map<String, String>> _yazbozElPuanlari = <int, Map<String, String>>{};
   final Map<String, int> _yazbozKafaSayilari = <String, int>{};
+  final Map<String, int> _islerTasCezaSayilari = <String, int>{};
+  String? _islerTasUyariOnayTasId;
+  bool _oyunTamamlandiMi = false;
   final Map<String, String> _botAcilisTipleri = <String, String>{};
   final Map<String, int> _botIlkAcilisPuanlari = <String, int>{};
   final Map<String, int> _botIlkAcilisCiftSayilari = <String, int>{};
@@ -156,6 +187,7 @@ class _GameTablePageState extends State<GameTablePage> {
   final Map<String, List<List<OkeyTasi>>> _acilanSerilerOyuncu = <String, List<List<OkeyTasi>>>{};
   final Map<String, List<List<OkeyTasi>>> _acilanCiftlerOyuncu = <String, List<List<OkeyTasi>>>{};
   final Map<String, int> _seriGrupIslemeSayilariBuTur = <String, int>{};
+  final List<_IslenenHamleKaydi> _buTurIslenenHamleler = <_IslenenHamleKaydi>[];
 
 
   List<String> _oyuncular = const <String>[];
@@ -245,13 +277,15 @@ class _GameTablePageState extends State<GameTablePage> {
                       final playerCardBottom = bottomRackBottom + userRackHeight + 16;
                       final messageBottom = bottomRackBottom + userRackHeight + 2;
                       final tasIsleWidth = 92.0;
-                      final tasIsleLeft = (bottomRackLeft + userRackWidth - tasIsleWidth - 8).clamp(12.0, w - tasIsleWidth - 12.0);
+                      final tasIsleGrupWidth = tasIsleWidth * 2 + 8;
+                      final tasIsleLeft = (bottomRackLeft + userRackWidth - tasIsleGrupWidth - 8).clamp(12.0, w - tasIsleGrupWidth - 12.0);
                       final tasIsleBottom = bottomRackBottom + userRackHeight + 8;
 
-                      final ortaLeft = max(210.0, w * .23);
-                      final ortaRight = max(210.0, w * .23);
-                      final ortaTop = max(220.0, h * .25);
-                      final ortaBottom = bottomRackBottom + userRackHeight + 128;
+                      // V01.06.4: Açılan taşların küçülmesini azaltmak için orta/açılan taş alanı büyütüldü.
+                      final ortaLeft = max(185.0, w * .18);
+                      final ortaRight = max(185.0, w * .18);
+                      final ortaTop = max(190.0, h * .22);
+                      final ortaBottom = bottomRackBottom + userRackHeight + 105;
 
                       final topBotId = _oyuncular.length > 2 ? _oyuncular[2] : 'bot_2';
                       final leftBotId = _solRakipId();
@@ -380,12 +414,18 @@ class _GameTablePageState extends State<GameTablePage> {
                             ),
                           ),
 
-                          // Taş işle: Oyuncu profilinin altından alındı; ıstakanın sağ üst köşesine, sağdan sola doğru yerleştirildi.
+                          // Taş işle / geri al: İşleme hatalarını aynı tur içinde düzeltmek için yan yana.
                           Positioned(
                             left: tasIsleLeft,
                             bottom: tasIsleBottom,
-                            width: tasIsleWidth,
-                            child: _miniButon('Taş işle', Icons.add_circle, _oyunBasladi ? _tasIsle : null),
+                            width: tasIsleGrupWidth,
+                            child: Row(
+                              children: [
+                                Expanded(child: _miniButon('Taş işle', Icons.add_circle, _oyunBasladi ? _tasIsle : null)),
+                                const SizedBox(width: 8),
+                                Expanded(child: _miniButon('Geri Al', Icons.undo, (_oyunBasladi && _buTurIslenenHamleler.isNotEmpty) ? _islenenTasiGeriAl : null)),
+                              ],
+                            ),
                           ),
                           Positioned(
                             left: bottomRackLeft,
@@ -906,6 +946,7 @@ class _GameTablePageState extends State<GameTablePage> {
     final kapaliOkey = yardimliIstaka && _gercekOkeyMi(tas);
     final dagitimGosterge = yardimliIstaka && _dagitimdanGelenGostergeMi(tas);
     final islekTas = yardimliIstaka && _islekTasMi(tas);
+    final ciftIslemeAdayi = yardimliIstaka && !islekTas && _ciftIslemeAdayiMi(tas);
 
     if (kapaliOkey) {
       return Container(
@@ -937,13 +978,16 @@ class _GameTablePageState extends State<GameTablePage> {
         border: Border.all(
           color: dagitimGosterge
               ? Colors.amber.shade700
-              : (islekTas ? Colors.lightGreenAccent.shade700 : (selected ? Colors.amber.shade700 : Colors.black87)),
-          width: dagitimGosterge || islekTas ? 2.4 : (selected ? 2.4 : 1.15),
+              : (islekTas
+                  ? Colors.lightGreenAccent.shade700
+                  : (ciftIslemeAdayi ? Colors.cyanAccent.shade700 : (selected ? Colors.amber.shade700 : Colors.black87))),
+          width: dagitimGosterge || islekTas || ciftIslemeAdayi ? 2.4 : (selected ? 2.4 : 1.15),
         ),
         boxShadow: [
           const BoxShadow(color: Colors.black54, blurRadius: 2.4, offset: Offset(1, 2)),
           if (dagitimGosterge) BoxShadow(color: Colors.amber.withOpacity(.75), blurRadius: 7, spreadRadius: 1),
           if (islekTas) BoxShadow(color: Colors.lightGreenAccent.withOpacity(.85), blurRadius: 8, spreadRadius: 1.2),
+          if (ciftIslemeAdayi) BoxShadow(color: Colors.cyanAccent.withOpacity(.75), blurRadius: 8, spreadRadius: 1.0),
         ],
       ),
       alignment: Alignment.center,
@@ -985,6 +1029,18 @@ class _GameTablePageState extends State<GameTablePage> {
                 decoration: BoxDecoration(color: Colors.lightGreenAccent.shade700, shape: BoxShape.circle, border: Border.all(color: Colors.black87, width: 1)),
                 alignment: Alignment.center,
                 child: const Icon(Icons.add, color: Colors.black, size: 10),
+              ),
+            ),
+          if (ciftIslemeAdayi && !dagitimGosterge)
+            Positioned(
+              right: -4,
+              top: -5,
+              child: Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(color: Colors.cyanAccent.shade700, shape: BoxShape.circle, border: Border.all(color: Colors.black87, width: 1)),
+                alignment: Alignment.center,
+                child: const Text('Ç', style: TextStyle(color: Colors.black, fontSize: 8, fontWeight: FontWeight.w900)),
               ),
             ),
         ],
@@ -1060,6 +1116,9 @@ class _GameTablePageState extends State<GameTablePage> {
       _botAcilisTipleri.clear();
       _botIlkAcilisPuanlari.clear();
       _botIlkAcilisCiftSayilari.clear();
+      _islerTasCezaSayilari.clear();
+      _islerTasUyariOnayTasId = null;
+      _oyunTamamlandiMi = false;
       _aktifOyuncuIndex = 0;
       _oyunBasladi = false;
       _baslayanIlkHamlesiniYaptiMi = false;
@@ -1126,6 +1185,9 @@ class _GameTablePageState extends State<GameTablePage> {
       _mevcutEl = 1;
       _yazbozElPuanlari.clear();
       _yazbozKafaSayilari.clear();
+      _islerTasCezaSayilari.clear();
+      _islerTasUyariOnayTasId = null;
+      _oyunTamamlandiMi = false;
       _benimIlkAcilisPuani = null;
       _benimIlkAcilisCiftSayisi = null;
       _elSonuIsleniyor = false;
@@ -1160,6 +1222,7 @@ class _GameTablePageState extends State<GameTablePage> {
 
   void _sirayiSaatYonununTersineGecir() {
     _seriGrupIslemeSayilariBuTur.clear();
+    _buTurIslenenHamleler.clear();
     if (_oyuncular.isEmpty) return;
     final aktifId = _oyuncular[_aktifOyuncuIndex];
     final sira = _saatYonununTersiOyuncuSirasi();
@@ -1222,23 +1285,36 @@ class _GameTablePageState extends State<GameTablePage> {
       _hataGoster('El açmadan ıstakada 21 taştan az kalamaz. Önce taş almalısınız.');
       return;
     }
-    _siraTimer?.cancel();
     final tasId = _seciliTasId;
     if (tasId == null) return;
     final uid = FirebaseAuth.instance.currentUser?.uid ?? 'oyuncu';
     final index = _istaka.indexWhere((t) => t?.id == tasId);
     if (index == -1) return;
 
+    final tas = _istaka[index];
+    if (tas == null) return;
+    final biterTasMi = _benimAcilisTipi != null && _eldekiTaslar().length == 1;
+    final islerTasCezasiVar = !biterTasMi && _islerTasCezasiGerektirir(uid, tas);
+    if (widget.yardimli && islerTasCezasiVar && _islerTasUyariOnayTasId != tas.id) {
+      _islerTasUyariOnayTasId = tas.id;
+      _hataGoster('Uyarı: Bu taş açık pere işlenebilir. Atarsanız el sonu puanınıza +101 ceza eklenir. Atmak için aynı taşı tekrar atın.');
+      return;
+    }
+
+    _siraTimer?.cancel();
     var elBitti = false;
     setState(() {
-      final tas = _istaka[index];
-      if (tas == null) return;
       _istaka[index] = null;
       _atilanTaslar.putIfAbsent(uid, () => <OkeyTasi>[]).add(_ozelIstakaIsaretleriniTemizle(tas));
+      if (islerTasCezasiVar) {
+        _islerTasCezaSayilari[uid] = (_islerTasCezaSayilari[uid] ?? 0) + 1;
+      }
+      _islerTasUyariOnayTasId = null;
       _seciliTasId = null;
       _geriBirakTasi = null;
       _geriBirakSahibi = null;
       _turdaTasCekildiMi = false;
+      _buTurIslenenHamleler.clear();
       if (uid == _baslayanOyuncuId && !_baslayanIlkHamlesiniYaptiMi) {
         _baslayanIlkHamlesiniYaptiMi = true;
       }
@@ -1273,6 +1349,7 @@ class _GameTablePageState extends State<GameTablePage> {
         return;
       }
       setState(() {
+        String? botAcilisMesaji;
         final el = _botElleri[aktifId];
         if (el != null && el.isNotEmpty) {
           final baslayanIlkHamle = aktifId == _baslayanOyuncuId && !_baslayanIlkHamlesiniYaptiMi;
@@ -1280,18 +1357,23 @@ class _GameTablePageState extends State<GameTablePage> {
             el.add(_ortaTaslar.removeAt(0));
           }
           if (!baslayanIlkHamle) {
-            _botElAcmaDenemesi(aktifId, el);
+            botAcilisMesaji = _botElAcmaDenemesi(aktifId, el);
           }
-          final atilacakIndex = _botAtilacakTasIndex(el);
+          final atilacakIndex = _botAtilacakTasIndex(el, botId: aktifId);
+          final botBiterTasMi = _botAcilisTipleri[aktifId] != null && el.length == 1;
           final atilan = el.removeAt(atilacakIndex);
+          if (!botBiterTasMi && _islerTasCezasiGerektirir(aktifId, atilan, el: el)) {
+            _islerTasCezaSayilari[aktifId] = (_islerTasCezaSayilari[aktifId] ?? 0) + 1;
+          }
           _atilanTaslar.putIfAbsent(aktifId, () => <OkeyTasi>[]).add(atilan);
           if (baslayanIlkHamle) {
             _baslayanIlkHamlesiniYaptiMi = true;
           }
         }
+        final botTasMesaji = '${_oyuncuAdlari[aktifId] ?? aktifId} taş attı.';
         _sirayiSaatYonununTersineGecir();
         _timerKey++;
-        _sonIslemMesaji = '${_oyuncuAdlari[aktifId] ?? aktifId} taş attı.';
+        _sonIslemMesaji = botAcilisMesaji != null ? '$botAcilisMesaji ve taş attı.' : botTasMesaji;
       });
       if (_ortaTaslar.isEmpty) {
         _desteBittiElSonu();
@@ -1315,21 +1397,25 @@ class _GameTablePageState extends State<GameTablePage> {
     _botTimer = Timer(const Duration(milliseconds: 450), () {
       if (!mounted || !_oyunBasladi) return;
       setState(() {
+        final botAcilisMesajlari = <String>[];
         for (final bot in <String>['bot_1', 'bot_2', 'bot_3']) {
           final el = _botElleri[bot];
           if (el == null || el.isEmpty) continue;
           if (_ortaTaslar.isNotEmpty && el.length < 22) {
             el.add(_ortaTaslar.removeAt(0));
           }
-          _botElAcmaDenemesi(bot, el);
-          final atilacakIndex = _botAtilacakTasIndex(el);
+          final botAcilisMesaji = _botElAcmaDenemesi(bot, el);
+          if (botAcilisMesaji != null) botAcilisMesajlari.add(botAcilisMesaji);
+          final atilacakIndex = _botAtilacakTasIndex(el, botId: bot);
           final atilan = el.removeAt(atilacakIndex);
           _atilanTaslar.putIfAbsent(bot, () => <OkeyTasi>[]).add(atilan);
         }
         _aktifOyuncuIndex = 0;
         _turdaTasCekildiMi = false;
         _timerKey++;
-        _sonIslemMesaji = 'Botlar oynadı. Sıra sizde, taş çekip taş atabilirsiniz.';
+        _sonIslemMesaji = botAcilisMesajlari.isNotEmpty
+            ? '${botAcilisMesajlari.join(' / ')}. Botlar oynadı. Sıra sizde, taş çekip taş atabilirsiniz.'
+            : 'Botlar oynadı. Sıra sizde, taş çekip taş atabilirsiniz.';
       });
       if (_ortaTaslar.isEmpty) {
         _desteBittiElSonu();
@@ -1381,18 +1467,30 @@ class _GameTablePageState extends State<GameTablePage> {
       if (_istaka[i] != null) doluIndexler.add(i);
     }
     if (doluIndexler.isEmpty) return;
-    final atilacakIndex = doluIndexler[Random().nextInt(doluIndexler.length)];
+    final guvenliIndexler = doluIndexler.where((i) {
+      final tas = _istaka[i];
+      return tas != null && !_islerTasCezasiGerektirir(uid, tas);
+    }).toList();
+    final adayIndexler = guvenliIndexler.isNotEmpty ? guvenliIndexler : doluIndexler;
+    final atilacakIndex = adayIndexler[Random().nextInt(adayIndexler.length)];
 
+    _siraTimer?.cancel();
     var elBitti = false;
     setState(() {
       final tas = _istaka[atilacakIndex];
       if (tas == null) return;
+      final islerTasCezasiVar = _islerTasCezasiGerektirir(uid, tas);
       _istaka[atilacakIndex] = null;
       _atilanTaslar.putIfAbsent(uid, () => <OkeyTasi>[]).add(_ozelIstakaIsaretleriniTemizle(tas));
+      if (islerTasCezasiVar) {
+        _islerTasCezaSayilari[uid] = (_islerTasCezaSayilari[uid] ?? 0) + 1;
+      }
+      _islerTasUyariOnayTasId = null;
       _seciliTasId = null;
       _geriBirakTasi = null;
       _geriBirakSahibi = null;
       _turdaTasCekildiMi = false;
+      _buTurIslenenHamleler.clear();
       if (uid == _baslayanOyuncuId && !_baslayanIlkHamlesiniYaptiMi) {
         _baslayanIlkHamlesiniYaptiMi = true;
       }
@@ -1425,12 +1523,25 @@ class _GameTablePageState extends State<GameTablePage> {
 
     final toplamEl = widget.elSayisi.clamp(1, 11).toInt();
     if (_mevcutEl >= toplamEl) {
-      _sonIslemMesaji = 'Siler! ${_mevcutEl}. El yazboza işlendi. Oyun bitti, toplam hesaplamaya geçilecek.';
+      _oyunTamamlandiMi = true;
+      _sonIslemMesaji = 'Siler! ${_mevcutEl}. El yazboza işlendi. Oyun bitti, yazboz açılıyor.';
+      _oyunSonuYazbozuAc();
       return;
     }
 
     _sonIslemMesaji = 'Siler! ${_mevcutEl}. El yazboza işlendi. Yeni el hazırlanıyor...';
     Timer(const Duration(milliseconds: 900), _yeniEliBaslat);
+  }
+
+
+  int _islerTasCezaPuani(String oyuncuId) => (_islerTasCezaSayilari[oyuncuId] ?? 0) * 101;
+
+  String _islerTasCezasiEkle(String temelPuan, String oyuncuId) {
+    final ceza = _islerTasCezaPuani(oyuncuId);
+    if (ceza <= 0 || temelPuan == '—') return temelPuan;
+    final sayi = int.tryParse(temelPuan);
+    if (sayi == null) return temelPuan;
+    return '${sayi + ceza}';
   }
 
   void _silerElPuanlariniYazbozaIsle(String bitirenOyuncuId) {
@@ -1452,16 +1563,16 @@ class _GameTablePageState extends State<GameTablePage> {
       }
 
       if (agirSiler) {
-        puanlar[oyuncu] = _oyuncuCifteGitMi(oyuncu) ? '808' : '404';
+        puanlar[oyuncu] = _islerTasCezasiEkle(_oyuncuCifteGitMi(oyuncu) ? '808' : '404', oyuncu);
         continue;
       }
 
       final tip = _oyuncuAcilisTipi(oyuncu);
       if (tip == null) {
-        puanlar[oyuncu] = _oyuncuCifteGitMi(oyuncu) ? '404' : '202';
+        puanlar[oyuncu] = _islerTasCezasiEkle(_oyuncuCifteGitMi(oyuncu) ? '404' : '202', oyuncu);
       } else {
         final kalan = _oyuncuKalanPuan(oyuncu);
-        puanlar[oyuncu] = tip == 'cift' ? '${kalan * 2}' : '$kalan';
+        puanlar[oyuncu] = _islerTasCezasiEkle(tip == 'cift' ? '${kalan * 2}' : '$kalan', oyuncu);
       }
     }
     _yazbozElPuanlari[_mevcutEl] = puanlar;
@@ -1512,7 +1623,7 @@ class _GameTablePageState extends State<GameTablePage> {
     final kimseElAcmadi = oyuncular.every((oyuncu) => _oyuncuAcilisTipi(oyuncu) == null);
     if (kimseElAcmadi) {
       for (final oyuncu in oyuncular) {
-        puanlar[oyuncu] = _oyuncuCifteGitMi(oyuncu) ? '404' : '202';
+        puanlar[oyuncu] = _islerTasCezasiEkle(_oyuncuCifteGitMi(oyuncu) ? '404' : '202', oyuncu);
       }
       _yazbozElPuanlari[_mevcutEl] = puanlar;
       return;
@@ -1522,10 +1633,10 @@ class _GameTablePageState extends State<GameTablePage> {
       final tip = _oyuncuAcilisTipi(oyuncu);
       if (tip != null) {
         final kalan = _oyuncuKalanPuan(oyuncu);
-        puanlar[oyuncu] = tip == 'cift' ? '${kalan * 2}' : '$kalan';
+        puanlar[oyuncu] = _islerTasCezasiEkle(tip == 'cift' ? '${kalan * 2}' : '$kalan', oyuncu);
       } else {
         // El açmamış oyuncu normalde 202 yer; Çifte Git seçip açamadıysa 404 yer.
-        puanlar[oyuncu] = _oyuncuCifteGitMi(oyuncu) ? '404' : '202';
+        puanlar[oyuncu] = _islerTasCezasiEkle(_oyuncuCifteGitMi(oyuncu) ? '404' : '202', oyuncu);
       }
     }
     _yazbozElPuanlari[_mevcutEl] = puanlar;
@@ -1542,8 +1653,10 @@ class _GameTablePageState extends State<GameTablePage> {
       setState(() {
         _oyunBasladi = false;
         _turdaTasCekildiMi = true;
-        _sonIslemMesaji = 'Deste bitti. ${_mevcutEl}. El puanları yazboza işlendi. Oyun bitti, toplam hesaplamaya geçilecek.';
+        _oyunTamamlandiMi = true;
+        _sonIslemMesaji = 'Deste bitti. ${_mevcutEl}. El puanları yazboza işlendi. Oyun bitti, yazboz açılıyor.';
       });
+      _oyunSonuYazbozuAc();
       return;
     }
     setState(() {
@@ -1594,6 +1707,12 @@ class _GameTablePageState extends State<GameTablePage> {
       _acilanCiftler.clear();
       _acilanSerilerOyuncu.clear();
       _acilanCiftlerOyuncu.clear();
+      _botAcilisTipleri.clear();
+      _botIlkAcilisPuanlari.clear();
+      _botIlkAcilisCiftSayilari.clear();
+      _islerTasCezaSayilari.clear();
+      _islerTasUyariOnayTasId = null;
+      _oyunTamamlandiMi = false;
       _geriBirakTasi = null;
       _geriBirakSahibi = null;
       _cifteGitModu = false;
@@ -1646,8 +1765,8 @@ class _GameTablePageState extends State<GameTablePage> {
     return _botAcilisTipleri[oyuncuId] == 'seri';
   }
 
-  void _botElAcmaDenemesi(String botId, List<OkeyTasi> el) {
-    if (_botAcilisTipleri.containsKey(botId) || el.length < 5) return;
+  String? _botElAcmaDenemesi(String botId, List<OkeyTasi> el) {
+    if (_botAcilisTipleri.containsKey(botId) || el.length < 5) return null;
 
     final seriGruplar = _seriGruplariFromTaslar(el);
     final seriPuani = seriGruplar.fold<int>(0, (toplam, grup) => toplam + _grupPuani(grup));
@@ -1673,7 +1792,7 @@ class _GameTablePageState extends State<GameTablePage> {
       acilisCiftSayisi = ciftSayisi;
     }
 
-    if (tip == null || acilacakGruplar.isEmpty) return;
+    if (tip == null || acilacakGruplar.isEmpty) return null;
 
     final kullanilan = acilacakGruplar.expand((grup) => grup).map((tas) => tas.id).toSet();
     if (tip == 'seri') {
@@ -1691,13 +1810,24 @@ class _GameTablePageState extends State<GameTablePage> {
     }
 
     el.removeWhere((tas) => kullanilan.contains(tas.id));
-    _sonIslemMesaji = '${_oyuncuAdlari[botId] ?? botId} ${tip == 'cift' ? '$acilisCiftSayisi çift' : '$acilisPuani puan'} ile el açtı.';
+    final mesaj = '${_oyuncuAdlari[botId] ?? botId} ${tip == 'cift' ? '$acilisCiftSayisi çift' : '$acilisPuani puan'} ile el açtı';
+    _sonIslemMesaji = '$mesaj.';
+    return mesaj;
   }
 
-  int _botAtilacakTasIndex(List<OkeyTasi> el) {
-    var secilen = 0;
-    var enDusuk = 9999;
+  int _botAtilacakTasIndex(List<OkeyTasi> el, {required String botId}) {
+    final adaylar = <int>[];
     for (var i = 0; i < el.length; i++) {
+      final kontrolEli = List<OkeyTasi>.from(el)..removeAt(i);
+      if (!_islerTasCezasiGerektirir(botId, el[i], el: kontrolEli)) {
+        adaylar.add(i);
+      }
+    }
+    final secenekler = adaylar.isNotEmpty ? adaylar : List<int>.generate(el.length, (i) => i);
+
+    var secilen = secenekler.first;
+    var enDusuk = 9999;
+    for (final i in secenekler) {
       final t = el[i];
       var skor = t.sayi ?? 0;
       if (t.sahteOkeyMi) skor += 900;
@@ -1711,6 +1841,7 @@ class _GameTablePageState extends State<GameTablePage> {
     }
     return secilen;
   }
+
 
   void _seriDiz() {
     if (_cifteGitModu && _benimAcilisTipi == null) {
@@ -1900,7 +2031,115 @@ class _GameTablePageState extends State<GameTablePage> {
     }
   }
 
+  bool _aktifOyuncuBenMiyim() {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'oyuncu';
+    return _oyunBasladi && _oyuncular.isNotEmpty && _oyuncular[_aktifOyuncuIndex] == uid;
+  }
+
+  bool _tasIslemeIcinTurUygunMu() {
+    if (!_oyunBasladi) {
+      _hataGoster('Oyun başlamadı.');
+      return false;
+    }
+    if (!_aktifOyuncuBenMiyim()) {
+      _hataGoster('Taş işlemek için sıranın sizde olması gerekir.');
+      return false;
+    }
+    if (!_turdaTasCekildiMi) {
+      _hataGoster('Taş işlemeden önce desteden veya yerden taş almalısınız.');
+      return false;
+    }
+    if (_benimAcilisTipi == null) {
+      _hataGoster('Taş işlemek için önce elini açmalısın.');
+      return false;
+    }
+    return true;
+  }
+
+  void _istakayaGeriKoy(OkeyTasi tas, int tercihIndex) {
+    if (tercihIndex >= 0 && tercihIndex < _istaka.length && _istaka[tercihIndex] == null) {
+      _istaka[tercihIndex] = tas;
+      return;
+    }
+    final bosIndex = _istaka.indexWhere((t) => t == null);
+    if (bosIndex != -1) _istaka[bosIndex] = tas;
+  }
+
+  void _seriGrupIslemeSayisiniAzalt(List<OkeyTasi> grup, _IslemeYonu yon) {
+    final key = _seriGrupIslemeKey(grup, yon);
+    final mevcut = _seriGrupIslemeSayilariBuTur[key] ?? 0;
+    if (mevcut <= 1) {
+      _seriGrupIslemeSayilariBuTur.remove(key);
+    } else {
+      _seriGrupIslemeSayilariBuTur[key] = mevcut - 1;
+    }
+  }
+
+  bool _gruptanTasCikar(List<OkeyTasi> grup, OkeyTasi tas) {
+    final index = grup.indexWhere((t) => t.id == tas.id);
+    if (index == -1) return false;
+    grup.removeAt(index);
+    return true;
+  }
+
+  void _islenenTasiGeriAl() {
+    if (!_tasIslemeIcinTurUygunMu()) return;
+    if (_buTurIslenenHamleler.isEmpty) {
+      _hataGoster('Bu tur geri alınacak işlenmiş taş yok.');
+      return;
+    }
+
+    setState(() {
+      final kayit = _buTurIslenenHamleler.removeLast();
+
+      if (kayit.okeyDegisimi) {
+        final gercekTas = kayit.taslar.first;
+        final grupIndex = kayit.grup.indexWhere((t) => t.id == gercekTas.id);
+        if (grupIndex != -1 && kayit.eskiOkey != null) {
+          kayit.grup[grupIndex] = kayit.eskiOkey!;
+        }
+        if (kayit.okeyIstakaIndex != null &&
+            kayit.okeyIstakaIndex! >= 0 &&
+            kayit.okeyIstakaIndex! < _istaka.length &&
+            _istaka[kayit.okeyIstakaIndex!]?.id == kayit.eskiOkey?.id) {
+          _istaka[kayit.okeyIstakaIndex!] = null;
+        } else if (kayit.eskiOkey != null) {
+          final okeyIndex = _istaka.indexWhere((t) => t?.id == kayit.eskiOkey!.id);
+          if (okeyIndex != -1) _istaka[okeyIndex] = null;
+        }
+        _istakayaGeriKoy(gercekTas, kayit.eskiIstakaIndexleri.first);
+      } else if (kayit.yeniGrupMu) {
+        if (kayit.ciftGrubuMu) {
+          _acilanCiftler.remove(kayit.grup);
+          final hedef = kayit.hedefOyuncuId;
+          if (hedef != null) _acilanCiftlerOyuncu[hedef]?.remove(kayit.grup);
+        } else {
+          _acilanSeriler.remove(kayit.grup);
+          final hedef = kayit.hedefOyuncuId;
+          if (hedef != null) _acilanSerilerOyuncu[hedef]?.remove(kayit.grup);
+        }
+        for (var i = 0; i < kayit.taslar.length; i++) {
+          _istakayaGeriKoy(kayit.taslar[i], kayit.eskiIstakaIndexleri[i]);
+        }
+      } else {
+        for (var i = kayit.taslar.length - 1; i >= 0; i--) {
+          final tas = kayit.taslar[i];
+          _gruptanTasCikar(kayit.grup, tas);
+          _istakayaGeriKoy(tas, kayit.eskiIstakaIndexleri[i]);
+        }
+        if (kayit.seriLimitSayildi && kayit.seriYonu != null) {
+          _seriGrupIslemeSayisiniAzalt(kayit.grup, kayit.seriYonu!);
+        }
+      }
+
+      _seciliTasId = null;
+      _puanlariGuncelle();
+      _sonIslemMesaji = 'Son işlenen hamle geri alındı.';
+    });
+  }
+
   void _tasIsle() {
+    if (!_tasIslemeIcinTurUygunMu()) return;
     final seciliId = _seciliTasId;
     if (seciliId == null) {
       _hataGoster('Taş işlemek için önce ıstakadan bir taş seçin.');
@@ -1919,14 +2158,29 @@ class _GameTablePageState extends State<GameTablePage> {
     // 1) Gerçek taş, yerdeki okeyin temsil ettiği taş ise okey geri alınır.
     final okeyGeriAlindi = _okeyGeriAlarakTasIsle(tas);
     if (okeyGeriAlindi) {
+      final alinanOkey = _geriAlinanOkey;
+      final okeyGrup = _geriAlinanOkeyGrup;
       setState(() {
         _istaka[index] = null;
         _soldanAlinanTasKullanildiysaTemizle(<String>{tas.id});
         final bosIndex = _istaka.indexWhere((t) => t == null);
-        if (bosIndex != -1 && _geriAlinanOkey != null) {
-          _istaka[bosIndex] = _geriAlinanOkey;
+        int? okeyIstakaIndex;
+        if (bosIndex != -1 && alinanOkey != null) {
+          _istaka[bosIndex] = alinanOkey;
+          okeyIstakaIndex = bosIndex;
+        }
+        if (okeyGrup != null && alinanOkey != null) {
+          _buTurIslenenHamleler.add(_IslenenHamleKaydi(
+            grup: okeyGrup,
+            taslar: <OkeyTasi>[tas],
+            eskiIstakaIndexleri: <int>[index],
+            okeyDegisimi: true,
+            eskiOkey: alinanOkey,
+            okeyIstakaIndex: okeyIstakaIndex,
+          ));
         }
         _geriAlinanOkey = null;
+        _geriAlinanOkeyGrup = null;
         _seciliTasId = null;
         _puanlariGuncelle();
         _sonIslemMesaji = 'Gerçek taş işlendi, yerdeki okey ıstakaya geri alındı.';
@@ -1952,6 +2206,13 @@ class _GameTablePageState extends State<GameTablePage> {
           hedef.add(tas);
         }
         _seriGrupIslemeSayisiniArtir(hedef, yon);
+        _buTurIslenenHamleler.add(_IslenenHamleKaydi(
+          grup: hedef,
+          taslar: <OkeyTasi>[tas],
+          eskiIstakaIndexleri: <int>[index],
+          seriYonu: yon,
+          seriLimitSayildi: true,
+        ));
         _soldanAlinanTasKullanildiysaTemizle(<String>{tas.id});
         _istaka[index] = null;
         _seciliTasId = null;
@@ -1986,6 +2247,15 @@ class _GameTablePageState extends State<GameTablePage> {
       _acilanCiftGruplariEkle(hedefOyuncu, <List<OkeyTasi>>[
         <OkeyTasi>[tas, es]
       ]);
+      final yeniGrup = _acilanCiftler.last;
+      _buTurIslenenHamleler.add(_IslenenHamleKaydi(
+        grup: yeniGrup,
+        taslar: <OkeyTasi>[tas, es],
+        eskiIstakaIndexleri: <int>[index, esIndex],
+        hedefOyuncuId: hedefOyuncu,
+        ciftGrubuMu: true,
+        yeniGrupMu: true,
+      ));
       _soldanAlinanTasKullanildiysaTemizle(<String>{tas.id, es.id});
       _istaka[index] = null;
       _istaka[esIndex] = null;
@@ -2006,16 +2276,41 @@ class _GameTablePageState extends State<GameTablePage> {
     return null;
   }
 
-  bool _islekTasMi(OkeyTasi tas) {
-    if (_benimAcilisTipi == null) return false;
-    if (_seriIslemeHedefiBul(tas) != null) return true;
-    if (_benimAcilisTipi == 'seri' && _oyuncular.any((oyuncuId) => _oyuncuCiftActiMi(oyuncuId))) {
-      return _istaka.any((diger) => diger != null && diger.id != tas.id && _manuelCiftGecerliMi(tas, diger));
+  bool _islekTasMi(OkeyTasi tas) => _islerTasCezasiGerektirir(FirebaseAuth.instance.currentUser?.uid ?? 'oyuncu', tas);
+
+  bool _ciftIslemeAdayiMi(OkeyTasi tas, {List<OkeyTasi>? el}) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'oyuncu';
+    if (_oyuncuAcilisTipi(uid) != 'seri') return false;
+    if (!_oyuncular.any((id) => id != uid && _oyuncuCiftActiMi(id))) return false;
+    final eldekiTaslar = el ?? _eldekiTaslar();
+    return eldekiTaslar.any((diger) => diger.id != tas.id && _manuelCiftGecerliMi(tas, diger));
+  }
+
+  bool _cifttekiOkeyYerineIslenebilirMi(OkeyTasi tas) {
+    if (_gercekOkeyMi(tas) || tas.sahteOkeyMi || tas.sayi == null) return false;
+    for (final grup in _acilanCiftler) {
+      if (grup.length < 2) continue;
+      final jokerIndex = grup.indexWhere(_gercekOkeyMi);
+      if (jokerIndex == -1) continue;
+      final diger = grup.firstWhere((t) => t.id != grup[jokerIndex].id, orElse: () => grup[jokerIndex]);
+      if (diger.id == grup[jokerIndex].id || diger.sahteOkeyMi || diger.sayi == null) continue;
+      if (diger.renk == tas.renk && diger.sayi == tas.sayi) return true;
     }
     return false;
   }
 
+  bool _islerTasCezasiGerektirir(String oyuncuId, OkeyTasi tas, {List<OkeyTasi>? el}) {
+    if (_acilanSeriler.isEmpty && _acilanCiftler.isEmpty) return false;
+    if (_seriIslemeHedefiBul(tas) != null) return true;
+    if (_cifttekiOkeyYerineIslenebilirMi(tas)) return true;
+
+    // Eldeki tam çiftler artık işler taş cezası değildir.
+    // Bunlar Taş İşle/Çift İşle mantığıyla çift açan oyuncunun alanına iki taş birlikte eklenir.
+    return false;
+  }
+
   OkeyTasi? _geriAlinanOkey;
+  List<OkeyTasi>? _geriAlinanOkeyGrup;
 
   bool _okeyGeriAlarakTasIsle(OkeyTasi gercekTas) {
     if (_gercekOkeyMi(gercekTas) || gercekTas.sahteOkeyMi || gercekTas.sayi == null) return false;
@@ -2026,6 +2321,19 @@ class _GameTablePageState extends State<GameTablePage> {
       if (temsil == null) continue;
       if (temsil.$1 == gercekTas.renk && temsil.$2 == gercekTas.sayi) {
         _geriAlinanOkey = grup[jokerIndex];
+        _geriAlinanOkeyGrup = grup;
+        grup[jokerIndex] = gercekTas;
+        return true;
+      }
+    }
+    for (final grup in _acilanCiftler) {
+      final jokerIndex = grup.indexWhere(_gercekOkeyMi);
+      if (jokerIndex == -1) continue;
+      final diger = grup.firstWhere((t) => t.id != grup[jokerIndex].id, orElse: () => grup[jokerIndex]);
+      if (diger.id == grup[jokerIndex].id || diger.sahteOkeyMi || diger.sayi == null) continue;
+      if (diger.renk == gercekTas.renk && diger.sayi == gercekTas.sayi) {
+        _geriAlinanOkey = grup[jokerIndex];
+        _geriAlinanOkeyGrup = grup;
         grup[jokerIndex] = gercekTas;
         return true;
       }
@@ -2086,12 +2394,13 @@ class _GameTablePageState extends State<GameTablePage> {
     // Botlar, sen el açtıktan sonra açsa bile aynı sahipId alanına çizilir.
     return LayoutBuilder(
       builder: (context, constraints) {
-        final topHeight = max(54.0, constraints.maxHeight * .24);
-        final midHeight = max(62.0, constraints.maxHeight * .34);
-        final bottomHeight = max(66.0, constraints.maxHeight - topHeight - midHeight - 12);
+        // V01.06.4: Büyüyen orta alanda bot/oyuncu açılan taş bölgelerine daha fazla pay verildi.
+        final topHeight = max(62.0, constraints.maxHeight * .27);
+        final midHeight = max(76.0, constraints.maxHeight * .38);
+        final bottomHeight = max(78.0, constraints.maxHeight - topHeight - midHeight - 12);
         return Column(
           children: [
-            SizedBox(height: topHeight, child: Center(child: _oyuncuAcilanAlan(bot2, compact: true))),
+            SizedBox(height: topHeight, child: Center(child: _oyuncuAcilanAlan(bot2, compact: true, zorlaYerTut: true))),
             const SizedBox(height: 4),
             SizedBox(
               height: midHeight,
@@ -2126,31 +2435,56 @@ class _GameTablePageState extends State<GameTablePage> {
   Widget _oyuncuAcilanAlan(String oyuncuId, {required bool compact, bool zorlaYerTut = false}) {
     final seriGruplar = _acilanSerilerOyuncu[oyuncuId] ?? const <List<OkeyTasi>>[];
     final ciftGruplar = _acilanCiftlerOyuncu[oyuncuId] ?? const <List<OkeyTasi>>[];
-    if (seriGruplar.isEmpty && ciftGruplar.isEmpty) return zorlaYerTut ? _bosAcilanAlan() : const SizedBox.shrink();
     final isim = _oyuncuAdlari[oyuncuId] ?? (oyuncuId == (FirebaseAuth.instance.currentUser?.uid ?? 'oyuncu') ? 'Sen' : oyuncuId);
+    final acilisTipi = oyuncuId == (FirebaseAuth.instance.currentUser?.uid ?? 'oyuncu') ? _benimAcilisTipi : _botAcilisTipleri[oyuncuId];
+    if (seriGruplar.isEmpty && ciftGruplar.isEmpty) {
+      if (acilisTipi != null) {
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(5),
+          decoration: BoxDecoration(color: Colors.black.withOpacity(.24), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.amber.withOpacity(.28))),
+          child: Center(child: Text('$isim açtı', style: const TextStyle(color: Colors.amberAccent, fontSize: 9.5, fontWeight: FontWeight.w900))),
+        );
+      }
+      return zorlaYerTut ? _bosAcilanAlan() : const SizedBox.shrink();
+    }
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(color: Colors.black.withOpacity(.24), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.amber.withOpacity(.28))),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(isim, style: const TextStyle(color: Colors.amberAccent, fontSize: 9.5, fontWeight: FontWeight.w900)),
-            if (seriGruplar.isNotEmpty)
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: seriGruplar.map(_seriGrupWidget).toList(),
-              ),
-            if (ciftGruplar.isNotEmpty)
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 4,
-                runSpacing: 3,
-                children: ciftGruplar.map((grup) => _ciftGrupWidget(grup, oyuncuId)).toList(),
-              ),
-          ],
-        ),
+      // V01.06.3: Açılan taş alanlarında dikey kaydırma kaldırıldı.
+      // Taşlar alan yüksekliğine sığmazsa tüm içerik otomatik küçülür;
+      // böylece masadaki açılan perler aşağı-yukarı kaydırmadan görünür kalır.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final icerik = Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(isim, style: const TextStyle(color: Colors.amberAccent, fontSize: 9.5, fontWeight: FontWeight.w900)),
+              if (seriGruplar.isNotEmpty)
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: seriGruplar.map(_seriGrupWidget).toList(),
+                ),
+              if (ciftGruplar.isNotEmpty)
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 4,
+                  runSpacing: 3,
+                  children: ciftGruplar.map((grup) => _ciftGrupWidget(grup, oyuncuId)).toList(),
+                ),
+            ],
+          );
+
+          return FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              width: constraints.maxWidth,
+              child: icerik,
+            ),
+          );
+        },
       ),
     );
   }
@@ -2197,6 +2531,7 @@ class _GameTablePageState extends State<GameTablePage> {
   }
 
   void _istakaTasiniSeriGrubaIsle(int fromIndex, List<OkeyTasi> grup) {
+    if (!_tasIslemeIcinTurUygunMu()) return;
     if (fromIndex < 0 || fromIndex >= _istaka.length) return;
     final tas = _istaka[fromIndex];
     if (tas == null) return;
@@ -2230,6 +2565,13 @@ class _GameTablePageState extends State<GameTablePage> {
         return;
       }
       if (siraliIsleme) _seriGrupIslemeSayisiniArtir(grup, yon);
+      _buTurIslenenHamleler.add(_IslenenHamleKaydi(
+        grup: grup,
+        taslar: <OkeyTasi>[tas],
+        eskiIstakaIndexleri: <int>[fromIndex],
+        seriYonu: yon,
+        seriLimitSayildi: siraliIsleme,
+      ));
       _soldanAlinanTasKullanildiysaTemizle(<String>{tas.id});
       _istaka[fromIndex] = null;
       _seciliTasId = null;
@@ -2239,6 +2581,7 @@ class _GameTablePageState extends State<GameTablePage> {
   }
 
   void _istakaCiftiniOyuncuyaIsle(int fromIndex, String hedefOyuncu) {
+    if (!_tasIslemeIcinTurUygunMu()) return;
     if (fromIndex < 0 || fromIndex >= _istaka.length) return;
     final tas = _istaka[fromIndex];
     if (tas == null) return;
@@ -2253,6 +2596,15 @@ class _GameTablePageState extends State<GameTablePage> {
       _acilanCiftGruplariEkle(hedefOyuncu, <List<OkeyTasi>>[
         <OkeyTasi>[tas, es]
       ]);
+      final yeniGrup = _acilanCiftler.last;
+      _buTurIslenenHamleler.add(_IslenenHamleKaydi(
+        grup: yeniGrup,
+        taslar: <OkeyTasi>[tas, es],
+        eskiIstakaIndexleri: <int>[fromIndex, esIndex],
+        hedefOyuncuId: hedefOyuncu,
+        ciftGrubuMu: true,
+        yeniGrupMu: true,
+      ));
       _soldanAlinanTasKullanildiysaTemizle(<String>{tas.id, es.id});
       _istaka[fromIndex] = null;
       _istaka[esIndex] = null;
@@ -2299,6 +2651,12 @@ class _GameTablePageState extends State<GameTablePage> {
       _istaka[hedef] = tas;
       hedef--;
     }
+  }
+
+  void _oyunSonuYazbozuAc() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _yazbozAc();
+    });
   }
 
   void _yazbozAc() {
@@ -2431,6 +2789,30 @@ class _GameTablePageState extends State<GameTablePage> {
         return toplam <= 0 ? '' : List.filled(toplam, 'X').join();
       }
       return kafaDegeri(sutunIndex);
+    }
+
+    if (satir == 'Toplam') {
+      if (!_oyunTamamlandiMi) return '';
+      int oyuncuToplami(int index) {
+        if (index < 0 || index >= _oyuncular.length) return 0;
+        final oyuncuId = _oyuncular[index];
+        var toplam = 0;
+        for (final puanlar in _yazbozElPuanlari.values) {
+          final deger = puanlar[oyuncuId];
+          if (deger == null) continue;
+          if (deger == '—') {
+            toplam -= 101;
+            continue;
+          }
+          toplam += int.tryParse(deger) ?? 0;
+        }
+        return toplam;
+      }
+      if (esli) {
+        final indexes = sutunIndex == 0 ? <int>[0, 2] : <int>[1, 3];
+        return '${indexes.fold<int>(0, (a, i) => a + oyuncuToplami(i))}';
+      }
+      return '${oyuncuToplami(sutunIndex)}';
     }
 
     final elMatch = RegExp(r'^(\d+)\. El$').firstMatch(satir);
